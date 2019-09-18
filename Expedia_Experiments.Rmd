@@ -1,0 +1,170 @@
+---
+title: "Experiments_Expedia"
+author: "Yi Lu"
+date: "2/18/2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+```{r}
+rm(list=ls())       # Remove anything that might currently be in memory so we can start fresh.
+
+```
+
+```{r}
+library(stargazer)
+
+```
+
+```{r}
+library(data.table)
+```
+
+
+```{r}
+train = fread("/Users/luyi/Downloads/Management/Assignment 4/train.csv")
+```
+
+Q1 
+```{r}
+# What is the key?
+uniqueN( train[,.(srch_id)]) / train[,.N]
+uniqueN( train[,.(srch_id, prop_id)]) / train[,.N]
+setkey(train, srch_id, prop_id)
+# The ID of the search and ID of the hotel are key of dictionary. Each key is an outcome of a search, decided by both the searching ID who search for a hotel on the Expedia website and the recommended hotel which shows on the website.
+```
+Q2(a)
+```{r}
+# (a) Regression of Expedia’s rankings for Expedias algorithm (random_bool = 0)
+# avoid memory errors
+train[, visitor_hist_starrating := as.numeric(visitor_hist_starrating) ]
+train[, visitor_hist_adr_usd := as.numeric(visitor_hist_adr_usd) ]
+train[, prop_location_score2 := as.numeric(prop_location_score2) ]
+train[, srch_query_affinity_score := as.numeric(srch_query_affinity_score) ]
+train[, orig_destination_distance := as.numeric(orig_destination_distance) ]
+
+# treat factor variable as numerical variable
+train[, prop_review_score := as.numeric(prop_review_score) ]
+
+
+# Regression for ranking
+algorithm = lm(position~log(price_usd + 1) + prop_starrating + prop_review_score + promotion_flag + prop_brand_bool + prop_location_score1 +prop_location_score2 +srch_query_affinity_score , data=subset(train, random_bool == 0) )
+
+algorithm_withbefore = lm(position~log(price_usd + 1) + prop_starrating + prop_review_score + promotion_flag + prop_brand_bool + prop_location_score1 +prop_location_score2 + srch_query_affinity_score+ visitor_hist_starrating + visitor_hist_adr_usd, data=subset(train, random_bool == 0) )
+
+algorithm_withsearch = lm(position~log(price_usd + 1) + prop_starrating + prop_review_score + promotion_flag + prop_brand_bool + prop_location_score1 +prop_location_score2 +srch_query_affinity_score + srch_destination_id + srch_length_of_stay + srch_booking_window + srch_room_count + srch_saturday_night_bool + srch_adults_count + srch_children_count, data=subset(train, random_bool == 0) )
+
+summary(algorithm)
+summary(algorithm_withbefore)
+summary(algorithm_withsearch)
+
+```
+Q2 (b)
+```{r}
+# (b) Regression of Expedia’s rankings for randomized data (random_bool = 1)
+random = lm(position~log(price_usd + 1) + prop_starrating + prop_review_score + promotion_flag + prop_brand_bool + prop_location_score1 +prop_location_score2 +srch_query_affinity_score , data=subset(train, random_bool == 1) )
+
+random_withbefore = lm(position~log(price_usd + 1) + prop_starrating + prop_review_score + promotion_flag + prop_brand_bool + prop_location_score1 +prop_location_score2 + srch_query_affinity_score+ visitor_hist_starrating + visitor_hist_adr_usd, data=subset(train, random_bool == 1) )
+
+random_withsearch = lm(position~log(price_usd + 1) + prop_starrating + prop_review_score + promotion_flag + prop_brand_bool + prop_location_score1 +prop_location_score2 +srch_query_affinity_score + srch_destination_id + srch_length_of_stay + srch_booking_window + srch_room_count + srch_saturday_night_bool + srch_adults_count + srch_children_count, data=subset(train, random_bool == 1) )
+
+summary(random)
+summary(random_withbefore)
+summary(random_withsearch)
+```
+
+Q2 (c)
+```{r}
+train[, rPosition := ceiling(10*runif(.N))]
+
+r_algorithm = lm(rPosition~log(price_usd + 1) + prop_starrating + prop_review_score + promotion_flag + prop_brand_bool + prop_location_score1 +prop_location_score2 +srch_query_affinity_score , data=subset(train, random_bool == 0) )
+
+r_random = lm(rPosition~log(price_usd + 1) + prop_starrating + prop_review_score + promotion_flag + prop_brand_bool + prop_location_score1 +prop_location_score2 +srch_query_affinity_score , data=subset(train, random_bool == 1) )
+
+summary(r_algorithm)
+summary(r_random)
+
+stargazer(algorithm, random, r_algorithm, r_random, type = 'text', title="Regression Results", align=TRUE,dep.var.labels=c("Algo&Random","Create"),
+omit.stat=c("LL","ser","f"), no.space=TRUE)
+```
+
+Expedia did not randomized the rankings because we can see for model(2) most variables are significant, but for randomized data we created like model(3) and model(4), just a few variables are significant and r-quared is really low.
+
+Q3
+```{r}
+# (a)
+# click-through rate and booking rate overall
+train[, sum(click_bool ==1 )/.N ]
+train[, sum(booking_bool == 1 )/.N ]
+
+train_random = subset(train, random_bool == 1)
+train_algorithm = subset(train, random_bool == 0)
+
+train_random[, sum(click_bool ==1 )/.N ]
+train_random[, sum(booking_bool == 1 )/.N ]
+
+# click-through rate and booking rate of Postition 1 & 10
+click_1 = train_random[, sum(click_bool ==1 & position == 1 )/.N ]
+booking_1 = train_random[, sum(booking_bool == 1 & position == 1 )/.N ]
+click_10 = train_random[, sum(click_bool ==1 & position == 10 )/.N ]
+booking_10 = train_random[, sum(booking_bool == 1 & position == 10 )/.N ]
+
+# Percentage difference of click-through rate and booking rate between Position 1 and Position 10 
+click_1 - click_10
+booking_1 - booking_10
+click_1/click_10
+booking_1/booking_10
+# The click-through rate of a hotel in Position 1 is about 3.4 times of that in Position 10.
+# The booking rate of a hotel in Position 1 is about 3.7 times of that in Position 10.
+
+```
+
+(b) Although ranking of hotels are randomly listed on website, customers have an insight about search ranking rules so they might think that hotels shown at first are those with a higher quality scores and are more suitable to them calculated by Expedia, so they are more likely to click on the first ranking hotels rather than lower position hotels. As a result, first ranking hotels gain higher probability to be clicked/booked.
+
+4
+```{r}
+result_random = train_random[, .(random_clickrate = sum(click_bool, na.rm=F)/.N, 
+                 random_bookingrate = sum(booking_bool, na.rm = F)/.N
+        ), position][order(position)]
+
+result_algorithm = train_algorithm[, .(algorithm_clickrate = sum(click_bool, na.rm=F)/.N,
+                    algorithm_bookingrate = sum(booking_bool, na.rm = F)/.N
+        ), position][order(position)]
+
+```
+
+```{r}
+library(data.table)
+setkey(result_random, position)
+setkey(result_algorithm, position)
+result = merge(result_random, result_algorithm, all.x = TRUE)
+result[, diff_clickrate := algorithm_clickrate - random_clickrate ]
+result[, times_clickrate := algorithm_clickrate / random_clickrate ]
+result[, diff_bookingrate := algorithm_bookingrate - random_bookingrate ]
+result[, times_bookingrate := algorithm_bookingrate / random_bookingrate ]
+
+result[, .(diff_clickrate, times_clickrate, diff_bookingrate, times_bookingrate), by=position]
+plot(result$position,result$diff_clickrate, main = 'click-through rate difference', xlab = 'Position', ylab = 'difference of click-through rate' )
+plot(result$position,result$diff_bookingrate, main = 'book rate difference', xlab = 'Position', ylab = 'difference of book rate' )
+
+```
+4(a)
+For position 1 to 4, Expedia’s ranking algorithm improve the click-through rate significantly, but for position after 4, Expedia’s ranking algorithm weaken the click-through rate. As plot 1 shows the improvement impact of click through rate caused by algorithm decreases as position increases.
+
+4(b)
+For all position 1 to 40(exclusive 23), Expedia’s ranking algorithm improve the book rate significantly, the biggest improvement exist in position 1 as about 10 times increase. As plot 2 shows the improvement impact of book rate caused by algorithm decreases as position increases.
+
+
+5
+The original data is obtained from Kaggle.com and consists of a representative sample of 9,917,530 hotels. The overall booking rate is 2.79%. The overall click-through-rate is 4.45%.
+
+Difference in click-through rate when receiving randomized ranking hotels vs. receiving Expedia algorithm ranking hotels shows that Expedia’s ranking algorithm increase the propability of click through of customers only for top 4 position, eg. the biggest impact happens at the first hotel which make customers more likely to click and increase the probablity of click to 1.5 times. The impact of improvement by algorithm decrease along position. For position after 4, Expedia’s ranking algorithm even decreases the desire of customers to click. 
+
+Difference in book rate when receiving randomized ranking hotels vs. receiving Expedia algorithm ranking hotels shows that Expedia’s ranking algorithm increase the propability of book for all positions, eg. the biggest impact happens at the first hotel which make customers more likely to book and increase the probablity of book to 10 times. The impacts of improvement by algorithm are significantly big(beyond 5 times increase) for top 22 position, and decrease as position decreases. 
+
+In a word, the Expedia’s recommendations really attracts more customers to book. This kind of attraction impact decreases as ranking position decreases. The Expedia’s recommendations attracts more customers to click only for top 4 hotels, after that Expedia’s recommendations make customers less willing to click. 
+
